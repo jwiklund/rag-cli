@@ -45,18 +45,18 @@ rag --rag_db /path/to/db <command>
 ## Installation
 
 ```bash
-pip install chromadb
+uv sync
 ```
 
 ## Example
 
 ```bash
 # Register current directory for indexing
-rag add .
+uv run rag add .
 
 # Index all files
-rag index
+uv run rag index
 
 # Search for content
-rag search "your search query"
+uv run rag search "your search query"
 ```
