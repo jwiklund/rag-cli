@@ -1,0 +1,18 @@
+
+# 2026-03-14 13:49:14.631148
++@AGENTS.md
+
+# 2026-03-14 13:53:48.615046
++ls
+
+# 2026-03-14 13:54:38.422688
++chromadb is already installed
+
+# 2026-03-14 14:13:41.392572
++Can you add a rag command to pyproject.toml?
+
+# 2026-03-14 14:23:39.294551
++/clear
+
+# 2026-03-14 14:24:07.891746
++Add a rag_db path argument, default to ~/.rag.db

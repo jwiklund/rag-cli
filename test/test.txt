@@ -1,0 +1,2 @@
+This is a test document for RAG client.
+It contains some sample text content.

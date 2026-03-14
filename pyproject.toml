@@ -1,0 +1,16 @@
+[project]
+name = "rag-cli"
+version = "0.1.0"
+description = "Simple rag cli"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=1.5.5",
+]
+
+[project.scripts]
+rag = "rag_cli.rag:main"
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"

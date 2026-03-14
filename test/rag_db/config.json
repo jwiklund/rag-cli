@@ -1,0 +1,27 @@
+{
+  "registered_directories": [
+    "/var/home/jwiklund/Source/misc"
+  ],
+  "file_metadata": {
+    "/var/home/jwiklund/Source/misc:README.md": {
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "file_path": "/var/home/jwiklund/Source/misc/README.md"
+    },
+    "/var/home/jwiklund/Source/misc:AGENTS.md": {
+      "hash": "0443e1fe478d28d02886bf8d4cd3a882ecbbe2d1af1dafe59bc5ba6f395c153f",
+      "file_path": "/var/home/jwiklund/Source/misc/AGENTS.md"
+    },
+    "/var/home/jwiklund/Source/misc:test.txt": {
+      "hash": "3b01b6a5e7f73afdca261b8a2bd4dfe6279dcc90d93836315e0ff68f4e388c32",
+      "file_path": "/var/home/jwiklund/Source/misc/test.txt"
+    },
+    "/var/home/jwiklund/Source/misc:test.md": {
+      "hash": "5f17d8d5d40af682bc857d0b75309d0c32fef33d9672855f1b436b2786d3930e",
+      "file_path": "/var/home/jwiklund/Source/misc/test.md"
+    },
+    "/var/home/jwiklund/Source/misc:test.org": {
+      "hash": "de37c70ebeb4c5952f3b3f1c89f4f8f80aa760371bcd4e0ced4950f2a58572cf",
+      "file_path": "/var/home/jwiklund/Source/misc/test.org"
+    }
+  }
+}
