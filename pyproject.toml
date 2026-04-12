@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-rag = "rag_cli.rag:main"
+rag = "rag_cli.main:main"
 
 [build-system]
 requires = ["uv_build"]

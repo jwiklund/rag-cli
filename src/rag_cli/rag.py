@@ -48,17 +48,21 @@ class RAGClient:
         directory = os.path.abspath(directory)
         for d in self.config["directories"]:
             if d["path"] == directory:
-                return d.get("split", False)
-        return False
+                return d.get("split", True)
+        return True
 
-    def list_directories(self):
+    def list_directories(self, files: bool = False):
         """List all registered directories."""
         if not self.config["directories"]:
             print("No directories are currently registered for indexing.")
         else:
             print(f"Registered directories ({len(self.config['directories'])}):")
-            for d in self.config["directories"]:
-                print(f"  {d['path']}")
+            if files:
+                for f in self.config.get("files", []):
+                    print(f"  {f}")
+            else:
+                for d in self.config["directories"]:
+                    print(f"  {d['path']}")
 
     def split_document_by_headers(self, content, file_path):
         """Split markdown/org document by headers (# for markdown, * for org)."""
@@ -121,7 +125,7 @@ class RAGClient:
         self.save_config()
         print(f"Removed directory: {directory}")
 
-    def add_directory(self, directory, split=False):
+    def add_directory(self, directory, split=True):
         """Register a directory for indexing."""
         directory = os.path.abspath(directory)
         for d in self.config["directories"]:
@@ -143,81 +147,102 @@ class RAGClient:
                     indexed_files.append(os.path.join(root, file))
         return indexed_files
 
-    def get_file_hash(self, file_path):
-        """Calculate SHA256 hash of a file."""
-        hash_sha256 = hashlib.sha256()
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_sha256.update(chunk)
-        return hash_sha256.hexdigest()
-
-    def index_files(self):
+    def index_files(self, verbose: bool = False):
         """Index all files in registered directories."""
         print("Indexing files...")
 
         for d in self.config["directories"]:
             directory = d["path"]
             print(f"Processing directory: {directory}")
-            indexed_files = self.get_indexed_files(directory)
-            dir_files = set()
 
+            indexed_files = self.get_indexed_files(directory)
             for file_path in indexed_files:
                 rel_path = os.path.relpath(file_path, directory)
                 key = f"{directory}/{rel_path}"
-                file_hash = self.get_file_hash(file_path)
+                content = self.read_file(file_path)
+                file_hash = self.hash_content(content)
 
                 # Check if file was already indexed and if it has changed
                 if key in self.config["files"]:
                     old_hash = self.config["files"][key]
                     if old_hash == file_hash:
-                        print(f"  Skipping unchanged file: {rel_path}")
-                        dir_files.add(key)
+                        if verbose:
+                            print(f"  Skipping unchanged file: {rel_path}")
                         continue
 
-                # Read file content
-                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                    content = f.read()
+                split_enabled = d.get("split", True)
+                existing_splits = set(
+                    self.collection.get(where={"file_path": key}, include=[])["ids"]
+                )
 
-                if d.get("split", False):
+                if split_enabled:
                     split_parts = self.split_document_by_headers(content, file_path)
-                    current_ids = self.collection.query(
-                        query_texts=[""], where={"file_path": key}, include=[]
-                    )["ids"][0]
-                    if current_ids:
-                        self.collection.delete(ids=current_ids)
-                    for i, part in enumerate(split_parts):
-                        part_key = f"{key}#{i:03d}"
+                    new_parts_docs = []
+                    new_parts_metadatas = []
+                    new_parts_ids = []
+
+                    for part in split_parts:
+                        part_content = part["content"]
+                        part_hash = self.hash_content(part_content)
+                        part_id = f"{key}#{part_hash}"
+
+                        if part_id not in existing_splits:
+                            new_parts_docs.append(part_content)
+                            new_parts_metadatas.append(
+                                {"dir_path": directory, "file_path": key}
+                            )
+                            new_parts_ids.append(part_id)
+                            if verbose:
+                                print(f"  Indexed (split): {part['title']}")
+                        else:
+                            existing_splits.remove(part_id)
+
+                    if new_parts_ids:
                         self.collection.add(
-                            documents=[part["content"]],
-                            metadatas=[{"dir_path": directory, "file_path": key}],
-                            ids=[part_key],
+                            documents=new_parts_docs,
+                            metadatas=new_parts_metadatas,
+                            ids=new_parts_ids,
                         )
-                        print(f"  Indexed (split): {part['title']}")
+
+                    if existing_splits:
+                        self.collection.delete(ids=list(existing_splits))
+
                     self.config["files"][key] = file_hash
-                    dir_files.add(key)
                 else:
                     # Add entire file as one document
-                    self.collection.add(
+                    self.collection.upsert(
                         documents=[content],
                         metadatas=[{"dir_path": directory, "file_path": key}],
                         ids=[key],
                     )
+                    existing_splits.remove(key)
+                    if existing_splits:
+                        self.collection.delete(ids=list(existing_splits))
+
                     self.config["files"][key] = file_hash
-                    dir_files.add(key)
-                    print(f"  Indexed: {rel_path}")
+                print(f"  Indexed: {rel_path}")
 
             def _split_file(id):
                 return id[: id.rfind("#")] if "#" in id else id
 
-            all_ids = self.collection.query(
-                query_texts=[""], where={"dir_path": directory}, include=[]
-            )["ids"][0]
-            old_ids = [k for k in all_ids if _split_file(k) not in dir_files]
+            indexed_files_set = set(indexed_files)
+            dir_ids = self.collection.get(where={"dir_path": directory}, include=[])[
+                "ids"
+            ]
+            old_ids = [k for k in dir_ids if _split_file(k) not in indexed_files_set]
             if old_ids:
                 self.collection.delete(ids=old_ids)
 
         self.config["last_indexed_time"] = datetime.now().astimezone().isoformat()
         self.save_config()
+
+    def read_file(self, file_path):
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read()
+
+    def hash_content(self, content):
+        """Calculate SHA256 hash of a string."""
+        return hashlib.sha256(content.encode("utf-8", errors="ignore")).hexdigest()
 
     def needs_implicit_reindex(self):
         """Check if implicit reindexing is needed based on time threshold."""
@@ -266,74 +291,3 @@ class RAGClient:
                 print(r["file_path"], ":")
                 print(r["text"])
                 print()
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="RAG client for indexing and searching documents"
-    )
-    parser.add_argument(
-        "--rag-db", default="~/.rag.db", help="Path to the RAG database directory"
-    )
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    # rag add command
-    add_parser = subparsers.add_parser("add", help="Register directory for indexing")
-    add_parser.add_argument("directory", type=str, help="Directory to register")
-    add_parser.add_argument(
-        "--split",
-        action="store_true",
-        help="Split document by headers (# for markdown, * for org) and index each part individually",
-    )
-
-    # rag index command
-    index_parser = subparsers.add_parser(
-        "index", help="Index all registered directories"
-    )
-
-    # rag list command
-    list_parser = subparsers.add_parser("list", help="List all registered directories")
-
-    # rag remove command
-    remove_parser = subparsers.add_parser(
-        "remove", help="Remove a directory from registered directories"
-    )
-    remove_parser.add_argument("directory", type=str, help="Directory to remove")
-
-    # rag search command
-    search_parser = subparsers.add_parser("search", help="Search the index")
-    search_parser.add_argument("query", nargs="*", type=str, help="Search query")
-    search_parser.add_argument(
-        "--json", action="store_true", help="Output results in JSON format"
-    )
-    search_parser.add_argument(
-        "--csv", action="store_true", help="Output results in CSV format"
-    )
-
-    args = parser.parse_args()
-    db_path = os.path.expanduser(args.rag_db)
-    client = RAGClient(db_path=db_path)
-
-    if args.command == "add":
-        client.add_directory(args.directory, split=args.split)
-    elif args.command == "list":
-        client.list_directories()
-    elif args.command == "remove":
-        client.del_directory(args.directory)
-    elif args.command == "index":
-        client.index_files()
-    elif args.command == "search":
-        # Determine output format
-        if args.json:
-            output_format = "json"
-        elif args.csv:
-            output_format = "csv"
-        else:
-            output_format = None
-        client.search(" ".join(args.query), output_format)
-    else:
-        parser.print_help()
-
-
-if __name__ == "__main__":
-    main()
